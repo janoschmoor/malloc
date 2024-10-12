@@ -1,0 +1,54 @@
+This file is hopefully gonna keep me sane
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	Template of a page
+
+<-- end of page
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+RES:next_page_ptr
+RES:end_ptr
+<-- start of page: returned by sbrk
+
+
+
+
+
+	Template of a 3 byte allocation. needs aligned(2*metadatasize+3) 16 bytes
+
+
