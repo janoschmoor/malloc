@@ -111,6 +111,8 @@ void *mm_malloc(size_t size)
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
 	// always points to next usable memory region
 	uint64_t *ptr = ((uint64_t *) begin + BYTE_TO_WORD(3));
+	// tracks bottom of current page
+	uint64_t **page = (uint64_t **) begin;
 
 	while(1) {
 		
@@ -118,11 +120,23 @@ void *mm_malloc(size_t size)
 		
 		if (*(ptr - 1) == 0) {
 			// reached top of page
-			if (begin == NULL) {
-
+			
+			if (*page == NULL) {
+				
+				ptr = new_page();
+				if (ptr == NULL) {
+					return NULL;
+				}
+				*page = ptr;
+				page = (uint64_t **) ptr;
+				ptr += WORD_TO_BYTE(3);
+				
 			} else {
-				 
+				
+				ptr = (*(page)) + WORD_TO_BYTE(3);
+				page = (uint64_t **) (*page);
 			}
+			continue;
 		}
 
 		// block is free and of proper size
