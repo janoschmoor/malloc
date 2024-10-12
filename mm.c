@@ -32,7 +32,8 @@ size_t pagesize;
 
 typedef struct block {
 	unsigned is_used;
-	size_t bytes;
+	size_t payload_bytes;
+	size_t block_bytes;
 	void* begin;
 } block;
 
@@ -44,7 +45,7 @@ void *new_page(void) {
 		return NULL;
 	}
 	
-	// first page points to next page
+	// first entry points to next page
 	*ptr = (uint64_t)NULL;
 
 	// initialise page as one large free-block
@@ -52,26 +53,39 @@ void *new_page(void) {
 	*(ptr + 1) = 0;
 	
 	// header of free-block: set to total available space leftshiftet by 1, 0: free, 1: inuse 
-	size_t avail_space = (pagesize-WORD_TO_BYTE(5)) << 1;
+	size_t avail_space = (pagesize-WORD_TO_BYTE(6)) << 1;
 	*(ptr + 2)= avail_space;
 
 	// footer of free-block: 
-	*(ptr + (BYTE_TO_WORD(pagesize))-2) = avail_space;
+	*(ptr + (BYTE_TO_WORD(pagesize))-3) = avail_space;
 
 	// zeroheader: set to 0 as there exists no block above it
-	*(ptr + (BYTE_TO_WORD(pagesize))-1) = 0;
+	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
 
-	return (void *) ptr;	
+	return (void *) ptr;
 }
 
 // initialises a block in the heap
 void *set_block(block b) {
 	uint64_t *ptr = (uint64_t *) b.begin;
-	*ptr = b.bytes << 1 | b.is_used;
-	*(ptr + BYTE_TO_WORD(b.bytes) -)
+	// Header
+	ptr--;
+	*ptr = b.payload_bytes << 1 | b.is_used;
+	// Footer
+	ptr += BYTE_TO_WORD(b.payload_bytes) + 1;
+	*ptr = b.payload_bytes << 1 | b.is_used;
+	return (void *) (ptr - BYTE_TO_WORD(b.payload_bytes));
+}
 
 block get_block(void *begin) {
 	uint64_t *ptr = (uint64_t *) begin;
+	block b = {
+		(*(ptr - 1)) & 0x1,
+		((*(ptr - 1)) >> 1),
+		((*(ptr - 1)) >> 1) + WORD_TO_BYTE(2),
+		begin
+	};
+	return b;
 }
 /* 
  * mm_init - initialize the malloc package.
@@ -93,46 +107,59 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-
+	size_t payload_bytes = ALIGN(size);
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
-	uint64_t *ptr = ((uint64_t *) begin + BYTE_TO_WORD(2));
+	// always points to next usable memory region
+	uint64_t *ptr = ((uint64_t *) begin + BYTE_TO_WORD(3));
 
-	while() {
+	while(1) {
 		
-		block b = {
-			*ptr & 0x1,
-			*ptr >> 1,
-			(void *)ptr
-		};
+		block b = get_block((void *)ptr);
+		
+		if (*(ptr - 1) == 0) {
+			// reached top of page
+			if (begin == NULL) {
 
-		// block is free and of proper size
-		if (!b.is_used && (b.size == required_bytes || b.size >= required_bytes + WORD_TO_BYTE(4))) { 
-			
-			// set to inuse
-			*ptr += 1;
-			
-			// convenient case
-			if (b.size == required_bytes) {
-				return (void *) (ptr + WORD_TO_BYTE(8)); 
 			} else {
-				size_t remaining_bytes = b.size - required_bytes;
-
-				block x = {
-
-				};
-				block y = {
-
-				};
-				
+				 
 			}
-			
-
-			// set to inuse
-			//*ptr += 1;
-			 
-
 		}
 
+		// block is free and of proper size
+		if (!b.is_used && (b.block_bytes == required_bytes || b.block_bytes >= required_bytes + WORD_TO_BYTE(4))) {
+			// block is free and of proper size;
+			
+			if (b.block_bytes == required_bytes) {
+				block x = {
+					1,
+					payload_bytes,
+					required_bytes,
+					(void *) ptr
+				};
+				return set_block(x);
+			} else {
+				size_t remaining_bytes = b.block_bytes - required_bytes;
+
+				block x = {
+					1,
+					payload_bytes,
+					required_bytes,
+					(void *) ptr
+				};
+				block y = {
+					0,
+					remaining_bytes - WORD_TO_BYTE(2),
+					remaining_bytes,
+					(void *) (ptr + BYTE_TO_WORD(remaining_bytes))
+				};
+
+				set_block(y);
+
+				return set_block(x);
+			}
+		} else {
+			ptr += BYTE_TO_WORD(b.block_bytes);
+		}
 	}
 }
 
