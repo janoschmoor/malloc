@@ -53,24 +53,23 @@ void *new_page(void) {
 	// zerofooter: set to 0 as there exists no block beneath it
 	*(ptr + 1) = 0;
 	
-	size_t avail_space = pagesize-WORD_TO_BYTE(6);
+	size_t avail_space = pagesize-WORD_TO_BYTE(6);// TODO avail_space calculation must be off as the set_block method is most likley correct
 
-	printf("space: %zu\n", avail_space);
+	//printf("space: %zu\n", avail_space);
 
 	block b = {
 		0,
-		avail_space,
 		avail_space - WORD_TO_BYTE(2),
+		avail_space,
 		(void *) (ptr + 3)
 	};
 	set_block(b);
 
-
-
 	// zeroheader: set to 0 as there exists no block above it
 	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
 
-	printf("DEBUG: new_page() begin [%p] size: %zu\n", ptr, pagesize);
+	//printf("DEBUG: new_page() begin [%p] size: %zu\n", ptr, pagesize);
+	
 	return (void *) ptr;
 }
 
@@ -79,10 +78,12 @@ void *set_block(block b) {
 	uint64_t *ptr = (uint64_t *) b.begin;
 	// Header
 	ptr--;
-	*ptr = b.payload_bytes << 1 | b.is_used;
+	*ptr = (b.payload_bytes << 1) | b.is_used;
 	// Footer
 	ptr += BYTE_TO_WORD(b.payload_bytes) + 1;
-	*ptr = b.payload_bytes << 1 | b.is_used;
+	*ptr = (b.payload_bytes << 1) | b.is_used;
+	printf("setblock footer %p, %llu\n", ptr, *ptr);
+
 	return (void *) (ptr - BYTE_TO_WORD(b.payload_bytes));
 }
 
@@ -109,12 +110,16 @@ void print_block(void *begin) {
 int mm_init(void)
 {
 	pagesize = mem_pagesize();
+	printf("pagesize: %zu\n", pagesize);
 	begin = new_page();
 	if (begin == NULL) {
 		return -1;
 	}
 
-	print_block((void *) ((uint64_t *)begin)+3); // TODO THIS +3 somehow does not increment the pointer by three adresses but three bytes
+	print_block((void *) (((uint64_t *)begin)+3));
+	
+	uint64_t *test = (uint64_t *) begin + 2045;
+	printf("%p -> %llu, heapsize: %zu\n", test, *test, mem_heapsize());
 
 	return 0;	
 }
