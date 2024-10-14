@@ -39,7 +39,6 @@ typedef struct block {
 
 // requests and initialises new pages
 void *new_page(void) {
-	
 	uint64_t *ptr = mem_sbrk(pagesize);
 	if (ptr == NULL) {
 		return NULL;
@@ -61,6 +60,8 @@ void *new_page(void) {
 
 	// zeroheader: set to 0 as there exists no block above it
 	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
+
+	printf("Requested new page\n");
 
 	return (void *) ptr;
 }
