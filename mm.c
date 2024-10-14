@@ -45,7 +45,7 @@ void *new_page(void) {
 	if (ptr == NULL) {
 		return NULL;
 	}
-	
+
 	// first entry points to next page
 	*ptr = (uint64_t)NULL;
 
@@ -53,7 +53,7 @@ void *new_page(void) {
 	// zerofooter: set to 0 as there exists no block beneath it
 	*(ptr + 1) = 0;
 	
-	size_t avail_space = pagesize-WORD_TO_BYTE(6);// TODO avail_space calculation must be off as the set_block method is most likley correct
+	size_t avail_space = pagesize-WORD_TO_BYTE(4);
 
 	//printf("space: %zu\n", avail_space);
 
@@ -82,7 +82,7 @@ void *set_block(block b) {
 	// Footer
 	ptr += BYTE_TO_WORD(b.payload_bytes) + 1;
 	*ptr = (b.payload_bytes << 1) | b.is_used;
-	printf("setblock footer %p, %llu\n", ptr, *ptr);
+	//printf("setblock footer %p, %llu\n", ptr, *ptr);
 
 	return (void *) (ptr - BYTE_TO_WORD(b.payload_bytes));
 }
@@ -136,7 +136,7 @@ void *mm_malloc(size_t size)
 	size_t payload_bytes = ALIGN(size);
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
 	// always points to next usable memory region
-	uint64_t *ptr = ((uint64_t *) begin + BYTE_TO_WORD(3));
+	uint64_t *ptr = ((uint64_t *) begin + 3);
 	// tracks bottom of current page
 	uint64_t **page = (uint64_t **) begin;
 
