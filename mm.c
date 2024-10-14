@@ -37,6 +37,8 @@ typedef struct block {
 	void* begin;
 } block;
 
+void *set_block(block);
+
 // requests and initialises new pages
 void *new_page(void) {
 	uint64_t *ptr = mem_sbrk(pagesize);
@@ -51,18 +53,24 @@ void *new_page(void) {
 	// zerofooter: set to 0 as there exists no block beneath it
 	*(ptr + 1) = 0;
 	
-	// header of free-block: set to total available space leftshiftet by 1, 0: free, 1: inuse 
-	size_t avail_space = (pagesize-WORD_TO_BYTE(6)) << 1;
-	*(ptr + 2)= avail_space;
+	size_t avail_space = pagesize-WORD_TO_BYTE(6);
 
-	// footer of free-block: 
-	*(ptr + (BYTE_TO_WORD(pagesize))-3) = avail_space;
+	printf("space: %zu\n", avail_space);
+
+	block b = {
+		0,
+		avail_space,
+		avail_space - WORD_TO_BYTE(2),
+		(void *) (ptr + 3)
+	};
+	set_block(b);
+
+
 
 	// zeroheader: set to 0 as there exists no block above it
 	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
 
-	printf("Requested new page\n");
-
+	printf("DEBUG: new_page() begin [%p] size: %zu\n", ptr, pagesize);
 	return (void *) ptr;
 }
 
@@ -88,6 +96,13 @@ block get_block(void *begin) {
 	};
 	return b;
 }
+
+//debug prints the block
+void print_block(void *begin) {
+	block b = get_block(begin);
+	printf("DEBUG: block at %p: [ is_used: %u, payload: %zu, block: %zu]\n", (uint64_t *) b.begin, b.is_used, b.payload_bytes, b.block_bytes);
+}
+
 /* 
  * mm_init - initialize the malloc package.
  */
@@ -98,7 +113,9 @@ int mm_init(void)
 	if (begin == NULL) {
 		return -1;
 	}
-	printf("pagesize: %zu, avail_space: %zu\n", pagesize, *((unsigned long *)begin + 2));
+
+	print_block((void *) ((uint64_t *)begin)+3); // TODO THIS +3 somehow does not increment the pointer by three adresses but three bytes
+
 	return 0;	
 }
 
@@ -108,6 +125,9 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
+	assert(size < pagesize - WORD_TO_BYTE(10));
+	//printf("mm_malloc() size: %zu\n", size);
+
 	size_t payload_bytes = ALIGN(size);
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
 	// always points to next usable memory region
@@ -132,6 +152,15 @@ void *mm_malloc(size_t size)
 				page = (uint64_t **) ptr;
 				ptr += WORD_TO_BYTE(3);
 				
+				// block x = {
+				// 	1,
+				// 	payload_bytes,
+				// 	required_bytes,
+				// 	(void *)ptr
+				// };
+
+				//printf("ptr: (%p, %llu) page: (%p, %p)\n", ptr, *ptr, page, *page);
+				//return set_block(b);
 			} else {
 				
 				ptr = (*(page)) + WORD_TO_BYTE(3);
