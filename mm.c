@@ -45,7 +45,7 @@ void *new_page(void) {
 	if (ptr == NULL) {
 		return NULL;
 	}
-
+	printf("DEBUG: new_page()\n");
 	return (void *) ptr;
 }
 
@@ -127,20 +127,56 @@ void *get_prev_ptr(void *begin) {
 	return (void *) ptr_next;
 }
 
-// void *coalesce(void *begin) {
-// 	printf("DEBUG: COALSESCE");
-// 	block b = get_block(begin);
-// 	print_block(begin);
-// 	
-// 	uint64_t *ptr = (uint64_t *) begin;
-// 	uint64_
-// }
+void *coalesce(void *begin) {
+	printf("DEBUG: COALSESCE\n");
+
+	uint64_t *prev_ptr = (uint64_t *) get_prev_ptr(begin);
+	uint64_t *next_ptr = (uint64_t *) get_next_ptr(begin);
+
+	block b = get_block(begin);
+	print_block(begin);
+	
+	if (b.is_used) {return begin;}
+
+	if (prev_ptr != NULL) {
+		block a = get_block(prev_ptr);
+		if (!a.is_used) {
+			size_t block_bytes = a.block_bytes + b.block_bytes;
+			block replacement = {
+				0,
+				block_bytes - WORD_TO_BYTE(2),
+				block_bytes,
+				a.begin
+			};
+			set_block(replacement);
+			b = replacement;
+		}
+	}
+	if (next_ptr != NULL) {
+		block c = get_block(next_ptr);
+		if (!c.is_used) {
+			size_t block_bytes = c.block_bytes + b.block_bytes;
+			block replacement = {
+				0,
+				block_bytes - WORD_TO_BYTE(2),
+				block_bytes,
+				b.begin
+			};
+			set_block(replacement);
+		}
+	}
+	
+	print_block(b.begin);
+
+	return b.begin;
+}
 
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
+	printf("DEBUG: mm_init()\n");
 	pagesize = mem_pagesize();
 	begin = new_page();
 	if (begin == NULL) {
@@ -182,18 +218,12 @@ void *mm_malloc(size_t size)
 	// tracks bottom of current page
 	//uint64_t **page = (uint64_t **) begin;
 
-	printf("request payload %zu required_bytes %zu size %zu\n", payload_bytes, required_bytes, size);
+	printf("DEBUG: request payload: %zu, required_bytes: %zu\n", payload_bytes, required_bytes);
 
 	while(1) {
 		
 		block b = get_block((void *)ptr);
 
-		printf("\n");
-
-		print_block(get_prev_ptr(b.begin));
-		print_block(b.begin);
-		print_block(get_next_ptr(b.begin));
-		
 		if (*(ptr - 1) == 0) {
 		
 			// assuming sbrk is contiguous
@@ -215,6 +245,9 @@ void *mm_malloc(size_t size)
 			};
 			ptr = set_block(y);
 			// TODO coalesing with previous potential freeblock (once coalescing functionality exists)
+			
+			coalesce((void *) ptr);
+
 			continue;
 		}
 
