@@ -46,35 +46,14 @@ void *new_page(void) {
 		return NULL;
 	}
 
-	// first entry points to next page
-	*ptr = (uint64_t)NULL;
-
-	// initialise page as one large free-block
-	// zerofooter: set to 0 as there exists no block beneath it
-	*(ptr + 1) = 0;
-	
-	size_t avail_space = pagesize-WORD_TO_BYTE(4);
-
-	//printf("space: %zu\n", avail_space);
-
-	block b = {
-		0,
-		avail_space - WORD_TO_BYTE(2),
-		avail_space,
-		(void *) (ptr + 3)
-	};
-	set_block(b);
-
-	// zeroheader: set to 0 as there exists no block above it
-	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
-
-	//printf("DEBUG: new_page() begin [%p] size: %zu\n", ptr, pagesize);
-	
 	return (void *) ptr;
 }
 
 // initialises a block in the heap
 void *set_block(block b) {
+
+	assert(b.payload_bytes + WORD_TO_BYTE(2) == b.block_bytes);
+
 	uint64_t *ptr = (uint64_t *) b.begin;
 	// Header
 	ptr--;
@@ -115,13 +94,26 @@ int mm_init(void)
 	if (begin == NULL) {
 		return -1;
 	}
+	uint64_t *ptr = (uint64_t *)begin;
 
-	print_block((void *) (((uint64_t *)begin)+3));
+	// first entry points to next page
+	*ptr = (uint64_t)NULL;
+	// zerofooter: set to 0 as there exists no block beneath it
+	*(ptr + 1) = 0;
 	
-	uint64_t *test = (uint64_t *) begin + 2045;
-	printf("%p -> %llu, heapsize: %zu\n", test, *test, mem_heapsize());
+	size_t avail_space = pagesize-WORD_TO_BYTE(4);
+	block b = {
+		0,
+		avail_space - WORD_TO_BYTE(2),
+		avail_space,
+		(void *) (ptr + 3)
+	};
+	set_block(b);
 
-	return 0;	
+	// zeroheader: set to 0 as there exists no block above it
+	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
+	print_block((void *) (((uint64_t *)begin)+3));
+	return 0;
 }
 
 /* 
@@ -138,7 +130,9 @@ void *mm_malloc(size_t size)
 	// always points to next usable memory region
 	uint64_t *ptr = ((uint64_t *) begin + 3);
 	// tracks bottom of current page
-	uint64_t **page = (uint64_t **) begin;
+	//uint64_t **page = (uint64_t **) begin;
+
+	printf("request payload %zu required_bytes %zu size %zu\n", payload_bytes, required_bytes, size);
 
 	while(1) {
 		
@@ -146,38 +140,53 @@ void *mm_malloc(size_t size)
 		
 		if (*(ptr - 1) == 0) {
 			// reached top of page
-			
-			if (*page == NULL) {
-				
-				ptr = new_page();
-				if (ptr == NULL) {
-					return NULL;
-				}
-				*page = ptr;
-				page = (uint64_t **) ptr;
-				ptr += WORD_TO_BYTE(3);
-				
-				// block x = {
-				// 	1,
-				// 	payload_bytes,
-				// 	required_bytes,
-				// 	(void *)ptr
-				// };
-
-				//printf("ptr: (%p, %llu) page: (%p, %p)\n", ptr, *ptr, page, *page);
-				//return set_block(b);
-			} else {
-				
-				ptr = (*(page)) + WORD_TO_BYTE(3);
-				page = (uint64_t **) (*page);
+		
+			// assuming sbrk is contiguous
+			uint64_t *next_page = (uint64_t *) new_page();
+			if (next_page == NULL) {
+				return NULL;
 			}
-			continue;
+			printf("next_page (%p), ptr (%p)\n", next_page, ptr);
+			assert(next_page - 1 == ptr);
+			
+			//zeroheader
+			*(next_page + (BYTE_TO_WORD(pagesize))-2) = 0;
+			
+			block y = {
+				0,
+				pagesize - WORD_TO_BYTE(4),
+				pagesize - WORD_TO_BYTE(2),
+				(void *) (next_page + 1)
+			};
+
+			ptr = set_block(y);
+			// TODO coalesing with previous potential freeblock (once coalescing functionality exists)
+
+			// printf("Reached end of page");
+			//
+			// if (*page == NULL) {
+			// 	
+			// 	ptr = new_page();
+			// 	if (ptr == NULL) {
+			// 		return NULL;
+			// 	}
+			// 	*page = ptr;
+			// 	page = (uint64_t **) ptr;
+			// 	ptr += WORD_TO_BYTE(3);
+			// 	
+			// } else {
+			// 	
+			// 	ptr = (*(page)) + WORD_TO_BYTE(3);
+			// 	page = (uint64_t **) (*page);
+			// }
+			// continue;
 		}
 
 		// block is free and of proper size
 		if (!b.is_used && (b.block_bytes == required_bytes || b.block_bytes >= required_bytes + WORD_TO_BYTE(4))) {
 			// block is free and of proper size;
 			
+
 			if (b.block_bytes == required_bytes) {
 				block x = {
 					1,
@@ -199,12 +208,16 @@ void *mm_malloc(size_t size)
 					0,
 					remaining_bytes - WORD_TO_BYTE(2),
 					remaining_bytes,
-					(void *) (ptr + BYTE_TO_WORD(remaining_bytes))
+					(void *) (ptr + BYTE_TO_WORD(required_bytes))
 				};
-
+			
 				set_block(y);
+				void *ret_val = set_block(x);
+				
+				//print_block(x.begin);
+				//print_block(y.begin);
 
-				return set_block(x);
+				return ret_val;
 			}
 		} else {
 			ptr += BYTE_TO_WORD(b.block_bytes);
@@ -239,15 +252,6 @@ void *mm_realloc(void *ptr, size_t size)
     // return newptr;
     return ptr;
 }
-
-
-
-
-
-
-
-
-
 
 
 
