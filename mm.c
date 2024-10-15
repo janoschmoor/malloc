@@ -111,14 +111,18 @@ void *get_next_ptr(void *begin) {
 	return (void *) ptr_next;
 }
 void *get_prev_ptr(void *begin) {
+
 	uint64_t *ptr = (uint64_t *)begin;
+	
+	print_heap((void *) (ptr - 4), 8);
+
 	if (ptr - 1 == NULL) {
 		return NULL;
 	}
 	if (ptr - 2 == NULL) {
 		return NULL;
 	}
-	uint64_t *ptr_next = ptr - BYTE_TO_WORD((*(ptr - 2)) >> 1) - 2; // TODO fix this jumping to below base heap ptr
+	uint64_t *ptr_next = ptr - BYTE_TO_WORD(((*(ptr - 2)) >> 1)) - 2;
 
 	return (void *) ptr_next;
 }
