@@ -38,6 +38,7 @@ typedef struct block {
 } block;
 
 void *set_block(block);
+void *get_next_ptr(void *);
 
 // requests and initialises new pages
 void *new_page(void) {
@@ -45,7 +46,7 @@ void *new_page(void) {
 	if (ptr == NULL) {
 		return NULL;
 	}
-	printf("DEBUG: new_page()\n");
+	//printf("DEBUG: new_page()\n");
 	return (void *) ptr;
 }
 
@@ -97,29 +98,49 @@ void print_heap(void *begin, uint64_t amt_words) {
 	}
 }
 
+void print_heap_blocks(void *begin) {
+	uint64_t *ptr = ((uint64_t *) begin) + 3;
+	int t = 1;
+	printf(" <-- Begin heap dump\n");
+	while (t) {
+		printf("\n");
+		print_block((void *) ptr);
+		print_heap((void *) (ptr - 3), 4);
+		ptr = (uint64_t *)get_next_ptr((void *) ptr);
+		//if ((void *)ptr < mem_heap_lo() || (void *)ptr > mem_heap_hi()) {printf("potential segfault (%p)\n", ptr); return;}
+		if (ptr == NULL) {
+			t = 0;
+			printf("invalid pointer\n");
+		} else if (*(ptr - 1) == 0) {
+			t = 0;
+			printf("\n");
+			print_heap((void *) (ptr - 3), 4);
+		}
+		printf("\n");
+	}
+	printf(" <-- End of heap dump\n");
+}
+
 void *get_next_ptr(void *begin) {
 	uint64_t *ptr = (uint64_t *)begin;
-	if (ptr - 1 == NULL) {
+	if (*(ptr - 1) == 0) {
 		return NULL;
 	}
 	block b = get_block(begin);
 	
 	uint64_t *ptr_next = (uint64_t *)b.begin + BYTE_TO_WORD(b.block_bytes);
-	if (ptr_next - 1 == NULL) {
+	if (*(ptr_next - 1) == 0) {
 		return NULL;
 	}
 	return (void *) ptr_next;
 }
 void *get_prev_ptr(void *begin) {
 
-	uint64_t *ptr = (uint64_t *)begin;
-	
-	print_heap((void *) (ptr - 4), 8);
-
-	if (ptr - 1 == NULL) {
+	uint64_t *ptr = (uint64_t *)begin;	
+	if (*(ptr - 1) == 0) {
 		return NULL;
 	}
-	if (ptr - 2 == NULL) {
+	if (*(ptr - 2) == 0) {
 		return NULL;
 	}
 	uint64_t *ptr_next = ptr - BYTE_TO_WORD(((*(ptr - 2)) >> 1)) - 2;
@@ -128,18 +149,20 @@ void *get_prev_ptr(void *begin) {
 }
 
 void *coalesce(void *begin) {
-	printf("DEBUG: COALSESCE\n");
+	// printf("DEBUG: COALSESCE (%p)\n", begin);
 
 	uint64_t *prev_ptr = (uint64_t *) get_prev_ptr(begin);
 	uint64_t *next_ptr = (uint64_t *) get_next_ptr(begin);
 
 	block b = get_block(begin);
-	print_block(begin);
+	// print_block(begin);
 	
 	if (b.is_used) {return begin;}
 
 	if (prev_ptr != NULL) {
 		block a = get_block(prev_ptr);
+		// printf("prev -> ");
+		// print_block((void *)prev_ptr);
 		if (!a.is_used) {
 			size_t block_bytes = a.block_bytes + b.block_bytes;
 			block replacement = {
@@ -150,10 +173,14 @@ void *coalesce(void *begin) {
 			};
 			set_block(replacement);
 			b = replacement;
+			// printf("replacement -> ");
+			// print_block(replacement.begin);
 		}
 	}
 	if (next_ptr != NULL) {
 		block c = get_block(next_ptr);
+		// printf("next -> ");
+		// print_block((void *)next_ptr);
 		if (!c.is_used) {
 			size_t block_bytes = c.block_bytes + b.block_bytes;
 			block replacement = {
@@ -163,10 +190,12 @@ void *coalesce(void *begin) {
 				b.begin
 			};
 			set_block(replacement);
+			// printf("replacement -> ");
+			// print_block(replacement.begin);
 		}
 	}
-	
-	print_block(b.begin);
+	// printf("\n");
+	//print_block(b.begin);
 
 	return b.begin;
 }
@@ -176,7 +205,7 @@ void *coalesce(void *begin) {
  */
 int mm_init(void)
 {
-	printf("DEBUG: mm_init()\n");
+	// printf("\nDEBUG: mm_init()\n");
 	pagesize = mem_pagesize();
 	begin = new_page();
 	if (begin == NULL) {
@@ -200,6 +229,9 @@ int mm_init(void)
 
 	// zeroheader: set to 0 as there exists no block above it
 	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
+
+	// print_heap_blocks(begin);
+
 	return 0;
 }
 
@@ -209,6 +241,8 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
+	// printf("DEBUG: mm_malloc(%zu)\n", size);
+
 	assert(size < pagesize - WORD_TO_BYTE(10));
 
 	size_t payload_bytes = ALIGN(size);
@@ -218,7 +252,7 @@ void *mm_malloc(size_t size)
 	// tracks bottom of current page
 	//uint64_t **page = (uint64_t **) begin;
 
-	printf("DEBUG: request payload: %zu, required_bytes: %zu\n", payload_bytes, required_bytes);
+	//printf("DEBUG: request payload: %zu, required_bytes: %zu\n", payload_bytes, required_bytes);
 
 	while(1) {
 		
@@ -244,10 +278,9 @@ void *mm_malloc(size_t size)
 				(void *) (next_page - 1)
 			};
 			ptr = set_block(y);
-			// TODO coalesing with previous potential freeblock (once coalescing functionality exists)
 			
 			coalesce((void *) ptr);
-
+			// print_heap_blocks(begin);
 			continue;
 		}
 
@@ -263,7 +296,9 @@ void *mm_malloc(size_t size)
 					required_bytes,
 					(void *) ptr
 				};
-				return set_block(x);
+				void *ret = set_block(x);
+				// print_heap_blocks(begin);
+				return ret;
 			} else {
 				size_t remaining_bytes = b.block_bytes - required_bytes;
 
@@ -281,7 +316,9 @@ void *mm_malloc(size_t size)
 				};
 			
 				set_block(y);
-				return set_block(x);
+				void *ret = set_block(x);
+				// print_heap_blocks(begin);
+				return ret;
 			}
 		} else {
 			ptr += BYTE_TO_WORD(b.block_bytes);
@@ -292,29 +329,22 @@ void *mm_malloc(size_t size)
 /*
  * mm_free - Freeing a block does nothing.
  */
-void mm_free(void *ptr)
-{
+void mm_free(void *_begin) {
+	// printf("DEBUG: mm_free(%p)\n", _begin);
+	block b = get_block(_begin);
+	b.is_used = 0;
+	set_block(b);
+	coalesce(_begin);
+	// print_heap_blocks(begin);
 }
 
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
-void *mm_realloc(void *ptr, size_t size)
+void *mm_realloc(void *_begin, size_t size)
 {
-    // void *oldptr = ptr;
-    // void *newptr;
-    // size_t copySize;
-    // 
-    // newptr = mm_malloc(size);
-    // if (newptr == NULL)
-    //   return NULL;
-    // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    // if (size < copySize)
-    //   copySize = size;
-    // memcpy(newptr, oldptr, copySize);
-    // mm_free(oldptr);
-    // return newptr;
-    return ptr;
+	mm_free(_begin);
+	return mm_malloc(size);
 }
 
 
