@@ -111,25 +111,22 @@ void *get_prev_ptr(void *begin) {
 	if (ptr - 1 == NULL) {
 		return NULL;
 	}
-	block b = get_block(begin);
-	
-	if (ptr_next - 2 == NULL) {
+	if (ptr - 2 == NULL) {
 		return NULL;
 	}
-	// TODO work
-	uint64_t *ptr_next = (uint64_t *)b.begin + BYTE_TO_WORD(b.block_bytes);
+	uint64_t *ptr_next = ptr - ((*(ptr - 2)) >> 1) + WORD_TO_BYTE(2);
 
 	return (void *) ptr_next;
 }
 
-void *coalesce(void *begin) {
-	prinf("DEBUG: COALSESCE");
-	block b = get_block(begin);
-	print_block(begin);
-	
-	uint64_t *ptr = (uint64_t *) begin;
-	uint64_
-}
+// void *coalesce(void *begin) {
+// 	printf("DEBUG: COALSESCE");
+// 	block b = get_block(begin);
+// 	print_block(begin);
+// 	
+// 	uint64_t *ptr = (uint64_t *) begin;
+// 	uint64_
+// }
 
 /* 
  * mm_init - initialize the malloc package.
