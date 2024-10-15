@@ -79,6 +79,10 @@ block get_block(void *begin) {
 
 //debug prints the block
 void print_block(void *begin) {
+	if (begin == NULL || get_block(begin).payload_bytes == 0) {
+		printf("DEBUG: Invalid block at %p\n", begin);
+		return;
+	}
 	block b = get_block(begin);
 	printf("DEBUG: block at %p: [ is_used: %u, payload: %zu, block: %zu]\n", (uint64_t *) b.begin, b.is_used, b.payload_bytes, b.block_bytes);
 }
@@ -114,7 +118,7 @@ void *get_prev_ptr(void *begin) {
 	if (ptr - 2 == NULL) {
 		return NULL;
 	}
-	uint64_t *ptr_next = ptr - ((*(ptr - 2)) >> 1) + WORD_TO_BYTE(2);
+	uint64_t *ptr_next = ptr - BYTE_TO_WORD((*(ptr - 2)) >> 1) - 2; // TODO fix this jumping to below base heap ptr
 
 	return (void *) ptr_next;
 }
@@ -166,7 +170,6 @@ int mm_init(void)
 void *mm_malloc(size_t size)
 {
 	assert(size < pagesize - WORD_TO_BYTE(10));
-	//printf("mm_malloc() size: %zu\n", size);
 
 	size_t payload_bytes = ALIGN(size);
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
@@ -180,6 +183,12 @@ void *mm_malloc(size_t size)
 	while(1) {
 		
 		block b = get_block((void *)ptr);
+
+		printf("\n");
+
+		print_block(get_prev_ptr(b.begin));
+		print_block(b.begin);
+		print_block(get_next_ptr(b.begin));
 		
 		if (*(ptr - 1) == 0) {
 		
