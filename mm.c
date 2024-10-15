@@ -83,13 +83,60 @@ void print_block(void *begin) {
 	printf("DEBUG: block at %p: [ is_used: %u, payload: %zu, block: %zu]\n", (uint64_t *) b.begin, b.is_used, b.payload_bytes, b.block_bytes);
 }
 
+void print_heap(void *begin, uint64_t amt_words) {
+	uint64_t *ptr = (uint64_t *) begin;
+	uint64_t *end = ptr + amt_words;
+
+	while (ptr < end) {	
+		printf("@%p: [%llu]\n", ptr, *ptr);
+		ptr++;
+	}
+}
+
+void *get_next_ptr(void *begin) {
+	uint64_t *ptr = (uint64_t *)begin;
+	if (ptr - 1 == NULL) {
+		return NULL;
+	}
+	block b = get_block(begin);
+	
+	uint64_t *ptr_next = (uint64_t *)b.begin + BYTE_TO_WORD(b.block_bytes);
+	if (ptr_next - 1 == NULL) {
+		return NULL;
+	}
+	return (void *) ptr_next;
+}
+void *get_prev_ptr(void *begin) {
+	uint64_t *ptr = (uint64_t *)begin;
+	if (ptr - 1 == NULL) {
+		return NULL;
+	}
+	block b = get_block(begin);
+	
+	if (ptr_next - 2 == NULL) {
+		return NULL;
+	}
+	// TODO work
+	uint64_t *ptr_next = (uint64_t *)b.begin + BYTE_TO_WORD(b.block_bytes);
+
+	return (void *) ptr_next;
+}
+
+void *coalesce(void *begin) {
+	prinf("DEBUG: COALSESCE");
+	block b = get_block(begin);
+	print_block(begin);
+	
+	uint64_t *ptr = (uint64_t *) begin;
+	uint64_
+}
+
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
 	pagesize = mem_pagesize();
-	printf("pagesize: %zu\n", pagesize);
 	begin = new_page();
 	if (begin == NULL) {
 		return -1;
@@ -112,7 +159,6 @@ int mm_init(void)
 
 	// zeroheader: set to 0 as there exists no block above it
 	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
-	print_block((void *) (((uint64_t *)begin)+3));
 	return 0;
 }
 
@@ -139,47 +185,27 @@ void *mm_malloc(size_t size)
 		block b = get_block((void *)ptr);
 		
 		if (*(ptr - 1) == 0) {
-			// reached top of page
 		
 			// assuming sbrk is contiguous
 			uint64_t *next_page = (uint64_t *) new_page();
 			if (next_page == NULL) {
 				return NULL;
 			}
-			printf("next_page (%p), ptr (%p)\n", next_page, ptr);
-			assert(next_page - 1 == ptr);
+			
+			assert(next_page == ptr + 1);
 			
 			//zeroheader
 			*(next_page + (BYTE_TO_WORD(pagesize))-2) = 0;
 			
 			block y = {
 				0,
-				pagesize - WORD_TO_BYTE(4),
 				pagesize - WORD_TO_BYTE(2),
-				(void *) (next_page + 1)
+				pagesize,
+				(void *) (next_page - 1)
 			};
-
 			ptr = set_block(y);
 			// TODO coalesing with previous potential freeblock (once coalescing functionality exists)
-
-			// printf("Reached end of page");
-			//
-			// if (*page == NULL) {
-			// 	
-			// 	ptr = new_page();
-			// 	if (ptr == NULL) {
-			// 		return NULL;
-			// 	}
-			// 	*page = ptr;
-			// 	page = (uint64_t **) ptr;
-			// 	ptr += WORD_TO_BYTE(3);
-			// 	
-			// } else {
-			// 	
-			// 	ptr = (*(page)) + WORD_TO_BYTE(3);
-			// 	page = (uint64_t **) (*page);
-			// }
-			// continue;
+			continue;
 		}
 
 		// block is free and of proper size
@@ -212,12 +238,7 @@ void *mm_malloc(size_t size)
 				};
 			
 				set_block(y);
-				void *ret_val = set_block(x);
-				
-				//print_block(x.begin);
-				//print_block(y.begin);
-
-				return ret_val;
+				return set_block(x);
 			}
 		} else {
 			ptr += BYTE_TO_WORD(b.block_bytes);
