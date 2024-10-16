@@ -150,11 +150,16 @@ void *get_prev_ptr(void *begin) {
 
 void *coalesce(void *begin) {
 	// printf("DEBUG: COALSESCE (%p)\n", begin);
-
+	// printf("%lu <- %p\n", (uintptr_t) begin, begin);	
+	// if (((uintptr_t)begin & 0xFFFF) == 0x3058) {
+	// 	printf("CRITICAL ADRESS\n");
+	// }
+	
 	uint64_t *prev_ptr = (uint64_t *) get_prev_ptr(begin);
 	uint64_t *next_ptr = (uint64_t *) get_next_ptr(begin);
 
 	block b = get_block(begin);
+	// printf("\n");
 	// print_block(begin);
 	
 	if (b.is_used) {return begin;}
@@ -192,11 +197,12 @@ void *coalesce(void *begin) {
 			set_block(replacement);
 			// printf("replacement -> ");
 			// print_block(replacement.begin);
+			
 		}
 	}
 	// printf("\n");
-	//print_block(b.begin);
-
+	// print_block(b.begin);
+	// printf("\n");
 	return b.begin;
 }
 
@@ -239,11 +245,16 @@ int mm_init(void)
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
+// size_t malloc_count = 0;
 void *mm_malloc(size_t size)
 {
 	// printf("DEBUG: mm_malloc(%zu)\n", size);
-
-	assert(size < pagesize - WORD_TO_BYTE(10));
+	// malloc_count++;
+	// assert(size < pagesize - WORD_TO_BYTE(10));
+	
+	// if (malloc_count == 500) {
+	// 	printf("testt");
+	// }
 
 	size_t payload_bytes = ALIGN(size);
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
@@ -279,7 +290,8 @@ void *mm_malloc(size_t size)
 			};
 			ptr = set_block(y);
 			
-			coalesce((void *) ptr);
+			ptr = coalesce((void *) ptr);
+			
 			// print_heap_blocks(begin);
 			continue;
 		}
@@ -297,10 +309,15 @@ void *mm_malloc(size_t size)
 					(void *) ptr
 				};
 				void *ret = set_block(x);
+				// if ((((long int) ret) & 0xFFFF) == 0x3058 || (((long int) ret) & 0xFFFF) == 0x3ff8) {
+				// 	printf("Critical adress1\n");
+				// }
 				// print_heap_blocks(begin);
 				return ret;
 			} else {
 				size_t remaining_bytes = b.block_bytes - required_bytes;
+				
+				assert(remaining_bytes / 8 * 8 == remaining_bytes);
 
 				block x = {
 					1,
@@ -318,6 +335,12 @@ void *mm_malloc(size_t size)
 				set_block(y);
 				void *ret = set_block(x);
 				// print_heap_blocks(begin);
+				// if ((((long int) ret) & 0xFFFF) == 0x3058 || (((long int) ret) & 0xFFFF) == 0x3ff8) {
+				// 	printf("Critical adress2\n");
+				//
+				// 	print_block(ret);
+				// 	print_block(y.begin);
+				// }
 				return ret;
 			}
 		} else {
@@ -343,8 +366,24 @@ void mm_free(void *_begin) {
  */
 void *mm_realloc(void *_begin, size_t size)
 {
+	if (_begin == NULL) {
+		return mm_malloc(size);
+	}
+	if (size == 0) {
+		mm_free(_begin);
+	}
+
+	block b = get_block(_begin);
+
+	void *ret = mm_malloc(size);
+	
+	if (ret == NULL) {
+		return NULL;
+	}
+	
+	memcpy(ret, _begin, (b.payload_bytes < size) ? b.payload_bytes : size);
 	mm_free(_begin);
-	return mm_malloc(size);
+	return ret;
 }
 
 
