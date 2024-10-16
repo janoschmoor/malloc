@@ -40,29 +40,23 @@ typedef struct block {
 void *set_block(block);
 void *get_next_ptr(void *);
 
-// requests and initialises new pages
 void *new_page(void) {
 	uint64_t *ptr = mem_sbrk(pagesize);
 	if (ptr == NULL) {
 		return NULL;
 	}
-	//printf("DEBUG: new_page()\n");
 	return (void *) ptr;
 }
 
 // initialises a block in the heap
 void *set_block(block b) {
-
+	// sets header and footer
 	assert(b.payload_bytes + WORD_TO_BYTE(2) == b.block_bytes);
-
 	uint64_t *ptr = (uint64_t *) b.begin;
-	// Header
 	ptr--;
 	*ptr = (b.payload_bytes << 1) | b.is_used;
-	// Footer
 	ptr += BYTE_TO_WORD(b.payload_bytes) + 1;
 	*ptr = (b.payload_bytes << 1) | b.is_used;
-	//printf("setblock footer %p, %llu\n", ptr, *ptr);
 
 	return (void *) (ptr - BYTE_TO_WORD(b.payload_bytes));
 }
@@ -78,7 +72,6 @@ block get_block(void *begin) {
 	return b;
 }
 
-//debug prints the block
 void print_block(void *begin) {
 	if (begin == NULL || get_block(begin).payload_bytes == 0) {
 		printf("DEBUG: Invalid block at %p\n", begin);
@@ -107,7 +100,6 @@ void print_heap_blocks(void *begin) {
 		print_block((void *) ptr);
 		print_heap((void *) (ptr - 3), 4);
 		ptr = (uint64_t *)get_next_ptr((void *) ptr);
-		//if ((void *)ptr < mem_heap_lo() || (void *)ptr > mem_heap_hi()) {printf("potential segfault (%p)\n", ptr); return;}
 		if (ptr == NULL) {
 			t = 0;
 			printf("invalid pointer\n");
@@ -149,25 +141,16 @@ void *get_prev_ptr(void *begin) {
 }
 
 void *coalesce(void *begin) {
-	// printf("DEBUG: COALSESCE (%p)\n", begin);
-	// printf("%lu <- %p\n", (uintptr_t) begin, begin);	
-	// if (((uintptr_t)begin & 0xFFFF) == 0x3058) {
-	// 	printf("CRITICAL ADRESS\n");
-	// }
 	
 	uint64_t *prev_ptr = (uint64_t *) get_prev_ptr(begin);
 	uint64_t *next_ptr = (uint64_t *) get_next_ptr(begin);
 
 	block b = get_block(begin);
-	// printf("\n");
-	// print_block(begin);
 	
 	if (b.is_used) {return begin;}
 
 	if (prev_ptr != NULL) {
 		block a = get_block(prev_ptr);
-		// printf("prev -> ");
-		// print_block((void *)prev_ptr);
 		if (!a.is_used) {
 			size_t block_bytes = a.block_bytes + b.block_bytes;
 			block replacement = {
@@ -178,14 +161,10 @@ void *coalesce(void *begin) {
 			};
 			set_block(replacement);
 			b = replacement;
-			// printf("replacement -> ");
-			// print_block(replacement.begin);
 		}
 	}
 	if (next_ptr != NULL) {
 		block c = get_block(next_ptr);
-		// printf("next -> ");
-		// print_block((void *)next_ptr);
 		if (!c.is_used) {
 			size_t block_bytes = c.block_bytes + b.block_bytes;
 			block replacement = {
@@ -195,14 +174,8 @@ void *coalesce(void *begin) {
 				b.begin
 			};
 			set_block(replacement);
-			// printf("replacement -> ");
-			// print_block(replacement.begin);
-			
 		}
 	}
-	// printf("\n");
-	// print_block(b.begin);
-	// printf("\n");
 	return b.begin;
 }
 
@@ -211,7 +184,6 @@ void *coalesce(void *begin) {
  */
 int mm_init(void)
 {
-	// printf("\nDEBUG: mm_init()\n");
 	pagesize = mem_pagesize();
 	begin = new_page();
 	if (begin == NULL) {
@@ -236,39 +208,23 @@ int mm_init(void)
 	// zeroheader: set to 0 as there exists no block above it
 	*(ptr + (BYTE_TO_WORD(pagesize))-2) = 0;
 
-	// print_heap_blocks(begin);
-
 	return 0;
 }
 
 /* 
- * mm_malloc - Allocate a block by incrementing the brk pointer.
- *     Always allocate a block whose size is a multiple of the alignment.
+ * mm_malloc - Implicit list
  */
-// size_t malloc_count = 0;
 void *mm_malloc(size_t size)
 {
-	// printf("DEBUG: mm_malloc(%zu)\n", size);
-	// malloc_count++;
-	// assert(size < pagesize - WORD_TO_BYTE(10));
-	
-	// if (malloc_count == 500) {
-	// 	printf("testt");
-	// }
 
 	size_t payload_bytes = ALIGN(size);
 	size_t required_bytes = ALIGN(size + WORD_TO_BYTE(2));
-	// always points to next usable memory region
 	uint64_t *ptr = ((uint64_t *) begin + 3);
-	// tracks bottom of current page
-	//uint64_t **page = (uint64_t **) begin;
 
-	//printf("DEBUG: request payload: %zu, required_bytes: %zu\n", payload_bytes, required_bytes);
 
 	while(1) {
 		
 		block b = get_block((void *)ptr);
-
 		if (*(ptr - 1) == 0) {
 		
 			// assuming sbrk is contiguous
@@ -276,8 +232,6 @@ void *mm_malloc(size_t size)
 			if (next_page == NULL) {
 				return NULL;
 			}
-			
-			assert(next_page == ptr + 1);
 			
 			//zeroheader
 			*(next_page + (BYTE_TO_WORD(pagesize))-2) = 0;
@@ -289,17 +243,14 @@ void *mm_malloc(size_t size)
 				(void *) (next_page - 1)
 			};
 			ptr = set_block(y);
-			
 			ptr = coalesce((void *) ptr);
 			
-			// print_heap_blocks(begin);
 			continue;
 		}
 
-		// block is free and of proper size
 		if (!b.is_used && (b.block_bytes == required_bytes || b.block_bytes >= required_bytes + WORD_TO_BYTE(4))) {
-			// block is free and of proper size;
-			
+
+			// split block or allocate entire block
 
 			if (b.block_bytes == required_bytes) {
 				block x = {
@@ -309,10 +260,6 @@ void *mm_malloc(size_t size)
 					(void *) ptr
 				};
 				void *ret = set_block(x);
-				// if ((((long int) ret) & 0xFFFF) == 0x3058 || (((long int) ret) & 0xFFFF) == 0x3ff8) {
-				// 	printf("Critical adress1\n");
-				// }
-				// print_heap_blocks(begin);
 				return ret;
 			} else {
 				size_t remaining_bytes = b.block_bytes - required_bytes;
@@ -334,13 +281,6 @@ void *mm_malloc(size_t size)
 			
 				set_block(y);
 				void *ret = set_block(x);
-				// print_heap_blocks(begin);
-				// if ((((long int) ret) & 0xFFFF) == 0x3058 || (((long int) ret) & 0xFFFF) == 0x3ff8) {
-				// 	printf("Critical adress2\n");
-				//
-				// 	print_block(ret);
-				// 	print_block(y.begin);
-				// }
 				return ret;
 			}
 		} else {
@@ -350,19 +290,17 @@ void *mm_malloc(size_t size)
 }
 
 /*
- * mm_free - Freeing a block does nothing.
+ * mm_free
  */
 void mm_free(void *_begin) {
-	// printf("DEBUG: mm_free(%p)\n", _begin);
 	block b = get_block(_begin);
 	b.is_used = 0;
 	set_block(b);
 	coalesce(_begin);
-	// print_heap_blocks(begin);
 }
 
 /*
- * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
+ * mm_realloc
  */
 void *mm_realloc(void *_begin, size_t size)
 {
@@ -374,15 +312,13 @@ void *mm_realloc(void *_begin, size_t size)
 	}
 
 	block b = get_block(_begin);
-
 	void *ret = mm_malloc(size);
 	
-	if (ret == NULL) {
-		return NULL;
-	}
+	if (ret == NULL) {return NULL;}
 	
 	memcpy(ret, _begin, (b.payload_bytes < size) ? b.payload_bytes : size);
 	mm_free(_begin);
+	
 	return ret;
 }
 
